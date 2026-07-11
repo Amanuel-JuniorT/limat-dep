@@ -55,6 +55,7 @@ interface SpinResult {
   message?: string;
   discountAmount?: number;
   timestamp: Date;
+  quantity?: number;
 }
 
 export default function PosPage() {
@@ -163,7 +164,11 @@ export default function PosPage() {
     (sum, item) => sum + item.price * item.quantity,
     0,
   );
-  const spinTotalCharge = (spinQuantity + spinResults.length) * SPIN_PRICE;
+  const totalSpinResultsCount = spinResults.reduce(
+    (sum, r) => sum + (r.quantity || 1),
+    0,
+  );
+  const spinTotalCharge = (spinQuantity + totalSpinResultsCount) * SPIN_PRICE;
   const subtotal = normalSubtotal + spinTotalCharge;
   const total = subtotal + tipAmount;
 
@@ -288,9 +293,22 @@ export default function PosPage() {
         itemId: item.id,
         itemName: item.name,
         timestamp: new Date(),
+        quantity: 1,
       };
 
-      setSpinResults((prev) => [result, ...prev]);
+      setSpinResults((prev) => {
+        const existing = prev.find(
+          (r) => r.type === "item" && r.itemId === item.id,
+        );
+        if (existing) {
+          return prev.map((r) =>
+            r.type === "item" && r.itemId === item.id
+              ? { ...r, quantity: (r.quantity || 1) + 1 }
+              : r,
+          );
+        }
+        return [result, ...prev];
+      });
       setSpinQuantity((prev) => Math.max(0, prev - 1));
       showToast("Spin reward recorded!", "success");
     } else if (selectedPrizeType === "sales") {
@@ -303,6 +321,21 @@ export default function PosPage() {
     }
 
     setSelectedItemId("");
+  };
+
+  const updateSpinResultQuantity = (id: string, delta: number) => {
+    setSpinResults((prev) =>
+      prev
+        .map((result) => {
+          if (result.id === id) {
+            const newQuantity = (result.quantity || 1) + delta;
+            if (newQuantity < 1) return null;
+            return { ...result, quantity: newQuantity };
+          }
+          return result;
+        })
+        .filter((result): result is SpinResult => result !== null),
+    );
   };
 
   const deleteSpinResult = (id: string) => {
@@ -403,13 +436,16 @@ export default function PosPage() {
     try {
       // 1. Process all Spin Results
       for (const result of spinResults) {
-        await api.post("/sales/spin", {
-          spinResult:
-            result.type === "item" ? `Won: ${result.itemName}` : "Reward",
-          rewardItemId:
-            result.type === "item" ? Number(result.itemId) : undefined,
-          tipAmount: 0,
-        });
+        const qty = result.quantity || 1;
+        for (let q = 0; q < qty; q++) {
+          await api.post("/sales/spin", {
+            spinResult:
+              result.type === "item" ? `Won: ${result.itemName}` : "Reward",
+            rewardItemId:
+              result.type === "item" ? Number(result.itemId) : undefined,
+            tipAmount: 0,
+          });
+        }
       }
 
       // 2. Process remaining unplayed spins
@@ -811,12 +847,22 @@ export default function PosPage() {
                         className="mb-2 flex items-center justify-between rounded-xl bg-purple-50/50 p-2 dark:bg-purple-900/10 last:mb-0"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="rounded-lg bg-white p-2 border border-purple-100 dark:bg-slate-900 dark:border-purple-900/30">
-                            {result.type === "item" ? (
-                              <Gift className="h-3.5 w-3.5 text-green-500" />
-                            ) : (
-                              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                            )}
+                          <div className="flex items-center gap-1 rounded-lg bg-white border border-purple-100 p-1 dark:bg-slate-900 dark:border-purple-900/30">
+                            <button
+                              onClick={() => updateSpinResultQuantity(result.id, -1)}
+                              className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <span className="w-5 text-center text-xs font-black tabular-nums text-slate-900 dark:text-white">
+                              {result.quantity || 1}
+                            </span>
+                            <button
+                              onClick={() => updateSpinResultQuantity(result.id, 1)}
+                              className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
                           </div>
                           <div>
                             <p className="text-[11px] font-bold text-slate-900 dark:text-white">
@@ -869,7 +915,7 @@ export default function PosPage() {
               </div>
               <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
                 <span>
-                  Spins ({spinQuantity + spinResults.length} × {SPIN_PRICE})
+                  Spins ({spinQuantity + totalSpinResultsCount} × {SPIN_PRICE})
                 </span>
                 <span className="font-bold text-slate-900 dark:text-white">
                   {formatMoney(spinTotalCharge)}
