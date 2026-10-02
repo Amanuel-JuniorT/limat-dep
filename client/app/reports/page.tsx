@@ -58,7 +58,10 @@ interface DailySummary {
   }>;
 }
 
+import { useAuth } from "@/context/AuthContext";
+
 export default function ReportsPage() {
+  const { user } = useAuth();
   const [summary, setSummary] = useState<DailySummary | null>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,8 +73,10 @@ export default function ReportsPage() {
   const [isRangeMode, setIsRangeMode] = useState(false);
 
   useEffect(() => {
-    fetchData();
-  }, [fromDate, toDate, isRangeMode]);
+    if (user?.role === "ADMIN") {
+      fetchData();
+    }
+  }, [fromDate, toDate, isRangeMode, user?.role]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -110,6 +115,26 @@ export default function ReportsPage() {
       setToDate(date.toISOString().split("T")[0]);
     }
   };
+
+  if (user && user.role !== "ADMIN") {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bento-card max-w-sm p-8 bg-white dark:bg-slate-900 flex flex-col items-center">
+          <div className="h-12 w-12 rounded-2xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 flex items-center justify-center mb-4">
+            <X className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-black tracking-tight mb-1">Access Restricted</h2>
+          <p className="text-xs text-slate-400 mb-6">Business reports are only accessible to administrators.</p>
+          <Link
+            href="/"
+            className="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-xs uppercase tracking-wider text-center"
+          >
+            Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-zinc-50 overflow-x-hidden p-6 print:p-0 print:bg-white print:text-black">

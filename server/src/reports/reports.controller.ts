@@ -1,31 +1,30 @@
-import { Controller, Get, UseGuards, Query, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, UseGuards, Query } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('summary')
+  @Roles('ADMIN', 'SELLER')
   getSummary(
-    @Req() req,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('destinationId') destinationId?: string,
   ) {
-    if (req.user.role !== 'ADMIN') {
-      throw new ForbiddenException('Access denied. Admin role required.');
-    }
     const startDate = from ? new Date(from) : new Date();
     const endDate = to ? new Date(to) : startDate;
-    return this.reportsService.getSummary(startDate, endDate);
+    const destId = destinationId ? parseInt(destinationId, 10) : undefined;
+    return this.reportsService.getSummary(startDate, endDate, destId);
   }
 
   @Get('inventory')
-  getInventoryStatus(@Req() req) {
-    if (req.user.role !== 'ADMIN') {
-      throw new ForbiddenException('Access denied. Admin role required.');
-    }
+  @Roles('ADMIN', 'STOCK')
+  getInventoryStatus() {
     return this.reportsService.getInventoryStatus();
   }
 }

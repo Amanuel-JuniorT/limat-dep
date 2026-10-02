@@ -11,23 +11,28 @@ import {
   User as UserIcon,
   Loader2,
   Search,
-  MoreVertical,
   Clock,
+  Ban,
+  RotateCcw,
 } from "lucide-react";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { Role } from "@/types/pos";
+import { useAuth } from "@/context/AuthContext";
 
-interface User {
+interface UserItem {
   id: number;
   name: string;
   phone: string;
-  role: "ADMIN" | "CASHIER" | "NORMAL";
+  email?: string;
+  role: Role;
   status: "PENDING" | "APPROVED" | "REJECTED";
   createdAt: string;
 }
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
+  const { user: currentUser } = useAuth();
+  const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [processingId, setProcessingId] = useState<number | null>(null);
@@ -47,17 +52,19 @@ export default function AdminUsersPage() {
     }
   };
 
-  const handleUpdateStatus = async (
+  const handleUpdateUser = async (
     id: number,
-    status: "APPROVED" | "REJECTED",
+    data: { status?: "APPROVED" | "REJECTED"; role?: Role },
   ) => {
     setProcessingId(id);
     try {
-      await api.patch(`/users/${id}`, { status });
-      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, status } : u)));
+      await api.patch(`/users/${id}`, data);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, ...data } : u)),
+      );
     } catch (error) {
-      console.error("Failed to update status", error);
-      alert("Error updating user status");
+      console.error("Failed to update user", error);
+      alert("Error updating user");
     } finally {
       setProcessingId(null);
     }
@@ -97,7 +104,7 @@ export default function AdminUsersPage() {
                   User <span className="text-indigo-600">Access</span>
                 </h1>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  Management Dashboard
+                  Role & Approval Control
                 </p>
               </div>
             </div>
@@ -127,11 +134,10 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <p className="text-sm font-black text-amber-900 dark:text-amber-100">
-                  {users.filter((u) => u.status === "PENDING").length} Users
-                  Pending
+                  {users.filter((u) => u.status === "PENDING").length} Users Pending
                 </p>
                 <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">
-                  Action required
+                  Approval required
                 </p>
               </div>
             </div>
@@ -144,75 +150,151 @@ export default function AdminUsersPage() {
           </div>
         ) : filteredUsers.length > 0 ? (
           <div className="space-y-4">
-            {filteredUsers.map((user) => (
-              <div
-                key={user.id}
-                className="bento-card p-5 border-none shadow-sm relative group overflow-hidden"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex gap-4">
-                    <div className="relative">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-white/5">
-                        <UserIcon className="h-5 w-5 text-slate-400" />
-                      </div>
-                      {user.role === "ADMIN" && (
-                        <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-lg bg-indigo-600 text-white border-2 border-white dark:border-slate-900">
-                          <Shield className="h-2.5 w-2.5" />
+            {filteredUsers.map((u) => {
+              const isRejected = u.status === "REJECTED";
+              return (
+                <div
+                  key={u.id}
+                  className={cn(
+                    "bento-card p-5 border-none shadow-sm relative overflow-hidden",
+                    isRejected && "opacity-60",
+                  )}
+                >
+                  {/* Rejected overlay stripe */}
+                  {isRejected && (
+                    <div className="absolute inset-0 bg-rose-50/40 dark:bg-rose-900/10 pointer-events-none" />
+                  )}
+
+                  <div className="flex items-start justify-between">
+                    <div className="flex gap-4">
+                      <div className="relative">
+                        <div className={cn(
+                          "flex h-12 w-12 items-center justify-center rounded-2xl",
+                          isRejected
+                            ? "bg-rose-50 dark:bg-rose-900/20"
+                            : "bg-slate-50 dark:bg-white/5",
+                        )}>
+                          {isRejected ? (
+                            <Ban className="h-5 w-5 text-rose-400" />
+                          ) : (
+                            <UserIcon className="h-5 w-5 text-slate-400" />
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black tracking-tight">
-                        {user.name}
-                      </h3>
-                      <p className="text-[11px] font-bold text-slate-400">
-                        {user.phone}
-                      </p>
+                        {u.role === "ADMIN" && !isRejected && (
+                          <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-lg bg-indigo-600 text-white border-2 border-white dark:border-slate-900">
+                            <Shield className="h-2.5 w-2.5" />
+                          </div>
+                        )}
+                      </div>
 
-                      <div className="mt-2 flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest",
-                            getStatusColor(user.status),
+                      <div>
+                        <h3 className={cn(
+                          "text-sm font-black tracking-tight",
+                          isRejected && "line-through text-slate-400",
+                        )}>
+                          {u.name}
+                        </h3>
+                        <p className="text-[11px] font-bold text-slate-400">
+                          {u.phone}
+                        </p>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest",
+                              getStatusColor(u.status),
+                            )}
+                          >
+                            {u.status}
+                          </span>
+
+                          {/* Role selector — hidden for rejected users */}
+                          {!isRejected && (
+                            <select
+                              value={u.role}
+                              onChange={(e) =>
+                                handleUpdateUser(u.id, { role: e.target.value as Role })
+                              }
+                              className="text-[9px] font-black uppercase tracking-widest bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1 border-none outline-none text-slate-700 dark:text-slate-200"
+                            >
+                              <option value="SELLER">SELLER (Shop/Event)</option>
+                              <option value="STOCK">STOCK (Warehouse)</option>
+                              <option value="ADMIN">ADMIN (Full Control)</option>
+                            </select>
                           )}
-                        >
-                          {user.status === "PENDING" && (
-                            <Clock className="h-2 w-2" />
-                          )}
-                          {user.status}
-                        </span>
-                        <span className="text-[8px] font-black uppercase tracking-widest text-slate-300">
-                          {user.role}
-                        </span>
+                        </div>
+
+                        {/* Rejection notice */}
+                        {isRejected && (
+                          <p className="mt-2 text-[9px] font-black uppercase tracking-widest text-rose-400">
+                            Access permanently denied
+                          </p>
+                        )}
                       </div>
                     </div>
-                  </div>
 
-                  {user.status === "PENDING" && (
-                    <div className="flex gap-2">
+                    {/* Actions */}
+                    {u.status === "PENDING" && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleUpdateUser(u.id, { status: "APPROVED" })}
+                          disabled={processingId === u.id}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-600 transition-all active:scale-90 dark:shadow-none"
+                          title="Approve user"
+                        >
+                          {processingId === u.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleUpdateUser(u.id, { status: "REJECTED" })}
+                          disabled={processingId === u.id}
+                          className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90 dark:bg-white/5"
+                          title="Reject user"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Ban button — for APPROVED users, but never for self */}
+                    {u.status === "APPROVED" && u.id !== currentUser?.id && (
                       <button
-                        onClick={() => handleUpdateStatus(user.id, "APPROVED")}
-                        disabled={processingId === user.id}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-600 transition-all active:scale-90 dark:shadow-none"
+                        onClick={() => handleUpdateUser(u.id, { status: "REJECTED" })}
+                        disabled={processingId === u.id}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90 dark:bg-white/5"
+                        title="Ban / Revoke access"
                       >
-                        {processingId === user.id ? (
+                        {processingId === u.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <CheckCircle2 className="h-4 w-4" />
+                          <Ban className="h-4 w-4" />
                         )}
                       </button>
+                    )}
+
+                    {/* Reinstate button — only for REJECTED users */}
+                    {u.status === "REJECTED" && (
                       <button
-                        onClick={() => handleUpdateStatus(user.id, "REJECTED")}
-                        disabled={processingId === user.id}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all active:scale-90 dark:bg-white/5"
+                        onClick={() => handleUpdateUser(u.id, { status: "APPROVED" })}
+                        disabled={processingId === u.id}
+                        className="flex items-center gap-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
+                        title="Reinstate user"
                       >
-                        <XCircle className="h-4 w-4" />
+                        {processingId === u.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        )}
+                        Reinstate
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="bento-card p-12 text-center flex flex-col items-center">
@@ -222,9 +304,6 @@ export default function AdminUsersPage() {
             <h3 className="text-lg font-black tracking-tight">
               No Users Found
             </h3>
-            <p className="mt-2 text-xs text-slate-400 font-medium">
-              Try adjusting your search query.
-            </p>
           </div>
         )}
       </div>

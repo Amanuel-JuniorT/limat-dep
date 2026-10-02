@@ -1,155 +1,117 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PurchasesService } from '../inventory/purchases.service';
-import { StockService } from '../inventory/stock.service';
-import { TransactionType, MovementType } from '@prisma/client';
 
 @Injectable()
 export class ReportsService {
-  constructor(
-    private prisma: PrismaService,
-    private purchasesService: PurchasesService,
-    private stockService: StockService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
-  async getSummary(startDate: Date, endDate: Date) {
+  async getSummary(startDate: Date, endDate: Date, destinationId?: number) {
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
-    const transactions = await this.prisma.transactions.findMany({
-      where: {
-        createdAt: {
-          gte: start,
-          lte: end,
-        },
+    const salesWhere: any = {
+      saleDate: { gte: start, lte: end },
+    };
+    const spinWhere: any = {
+      reportDate: { gte: start, lte: end },
+    };
+    if (destinationId) {
+      salesWhere.destinationId = destinationId;
+      spinWhere.destinationId = destinationId;
+    }
+
+    const salesReports = await this.prisma.salesReport.findMany({
+      where: salesWhere,
+      include: {
+        items: { include: { item: true } },
       },
     });
 
-    const salesRevenue = transactions
-      .filter((t) => t.type === TransactionType.SALE)
-      .reduce((sum, t) => sum + Number(t.subtotal || 0), 0);
+    const spinReports = await this.prisma.spinReport.findMany({
+      where: spinWhere,
+      include: {
+        items: { include: { item: true } },
+      },
+    });
 
-    const salesCount = transactions.filter((t) => t.type === TransactionType.SALE).length;
+    const salesRevenue = salesReports.reduce((sum, r) => sum + Number(r.subtotal || 0), 0);
+    const salesCount = salesReports.length;
 
-    const spinRevenue = transactions
-      .filter((t) => t.type === TransactionType.SPIN)
-      .reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
+    const spinRevenue = spinReports.reduce((sum, r) => sum + Number(r.subtotal || 0), 0);
+    const spinCount = spinReports.reduce((sum, r) => sum + r.spinCount, 0);
 
-    const spinCount = transactions.filter((t) => t.type === TransactionType.SPIN).length;
+    const salesTips = salesReports.reduce((sum, r) => sum + Number(r.tipAmount || 0), 0);
+    const spinTips = spinReports.reduce((sum, r) => sum + Number(r.tipAmount || 0), 0);
+    const totalTips = salesTips + spinTips;
 
-    const totalTips = transactions.reduce((sum, t) => sum + Number(t.tipAmount || 0), 0);
-    const totalRevenue = transactions.reduce((sum, t) => sum + Number(t.totalAmount || 0), 0);
+    const totalRevenue = salesRevenue + spinRevenue + totalTips;
 
-    // Initial breakdown values
     const paymentBreakdown = { CASH: 0, TELEBIRR: 0, CBE: 0 };
     const tipBreakdown = { CASH: 0, TELEBIRR: 0, CBE: 0 };
 
-    transactions.forEach((t) => {
-      if (t.paymentMethod === 'CUSTOM' && t.paymentDetails) {
-        const details = t.paymentDetails as any;
-        paymentBreakdown.CASH += Number(details.CASH || 0);
-        paymentBreakdown.TELEBIRR += Number(details.TELEBIRR || 0);
-        paymentBreakdown.CBE += Number(details.CBE || 0);
-
-        // We assume tips are currently lumped, but if we wanted to split them 
-        // we'd need tipDetails. For now, we attribute tip to the primary methods if simple, 
-        // or just keep it simple. If it's CUSTOM, we might just attribute the tip to CASH 
-        // or distribute it proportionally. For now, since the UI uses "Keep Change as Tip"
-        // mostly for CASH or CUSTOM modal, let's just use the primary method for tips
-        // if it's not custom. If it IS custom, we'll attribute to CASH for now as a fallback.
-        tipBreakdown.CASH += Number(t.tipAmount || 0);
-      } else {
-        const method = t.paymentMethod as keyof typeof paymentBreakdown;
-        if (paymentBreakdown[method] !== undefined) {
-          paymentBreakdown[method] += Number(t.totalAmount || 0);
-          tipBreakdown[method] += Number(t.tipAmount || 0);
-        }
+    // Process sales report payments
+    salesReports.forEach((r) => {
+      const method = r.paymentMethod as keyof typeof paymentBreakdown;
+      if (paymentBreakdown[method] !== undefined) {
+        paymentBreakdown[method] += Number(r.totalAmount || 0);
+        tipBreakdown[method] += Number(r.tipAmount || 0);
       }
     });
 
-    // Gross Profit calculation using Average Cost
-    let totalCOGS = 0;
-    const saleItems = await this.prisma.transactionItems.findMany({
-      where: {
-        transaction: {
-          createdAt: { gte: start, lte: end },
-          type: TransactionType.SALE,
-        },
-      },
-      include: {
-        item: {
-          select: { name: true }
-        }
+    // Process spin report payments
+    spinReports.forEach((r) => {
+      const method = r.paymentMethod as keyof typeof paymentBreakdown;
+      if (paymentBreakdown[method] !== undefined) {
+        paymentBreakdown[method] += Number(r.totalAmount || 0);
+        tipBreakdown[method] += Number(r.tipAmount || 0);
       }
     });
 
-    // Item breakdown for reconciliation
+    // Item sales breakdown
     const itemMap = new Map<number, { name: string; quantity: number; revenue: number }>();
-    
-    // Cache average costs to avoid repetitive DB hits
-    const costCache = new Map<number, number>();
-    for (const item of saleItems) {
-      if (!costCache.has(item.itemId)) {
-        costCache.set(item.itemId, await this.purchasesService.calculateAverageCost(item.itemId));
-      }
-      totalCOGS += (costCache.get(item.itemId) || 0) * item.quantity;
-
-      // Aggregating for itemBreakdown
-      const existing = itemMap.get(item.itemId) || { name: item.item.name, quantity: 0, revenue: 0 };
-      existing.quantity += item.quantity;
-      existing.revenue += Number(item.subtotal);
-      itemMap.set(item.itemId, existing);
-    }
+    salesReports.forEach((r) => {
+      r.items.forEach((item) => {
+        const existing = itemMap.get(item.itemId) || { name: item.item.name, quantity: 0, revenue: 0 };
+        existing.quantity += item.quantity;
+        existing.revenue += Number(item.subtotal);
+        itemMap.set(item.itemId, existing);
+      });
+    });
 
     const itemBreakdown = Array.from(itemMap.entries()).map(([itemId, data]) => ({
       itemId,
       ...data,
-      revenue: Number(data.revenue.toFixed(2))
+      revenue: Number(data.revenue.toFixed(2)),
     }));
 
-    // Spin rewards items & cost
-    const spinRewards = await this.prisma.inventoryMovements.findMany({
-      where: {
-        createdAt: { gte: start, lte: end },
-        type: MovementType.SPIN_REWARD,
-      },
-      include: {
-        item: {
-          select: { name: true },
-        },
-      },
+    // Spin rewards & event sales breakdown
+    const spinItemMap = new Map<number, { name: string; quantity: number }>();
+    spinReports.forEach((r) => {
+      r.items.forEach((item) => {
+        if (item.itemId && item.item) {
+          const existing = spinItemMap.get(item.itemId) || { name: item.item.name, quantity: 0 };
+          existing.quantity += item.quantity;
+          spinItemMap.set(item.itemId, existing);
+        }
+      });
     });
 
-    const spinItemMap = new Map<number, { name: string; quantity: number }>();
-    let marketingCost = 0;
+    const spinBreakdown = Array.from(spinItemMap.entries()).map(([itemId, data]) => ({
+      itemId,
+      ...data,
+    }));
 
-    for (const reward of spinRewards) {
-      if (!costCache.has(reward.itemId)) {
-        costCache.set(
-          reward.itemId,
-          await this.purchasesService.calculateAverageCost(reward.itemId),
-        );
-      }
-      marketingCost +=
-        (costCache.get(reward.itemId) || 0) * Math.abs(reward.quantityChange);
+    // Wastage summary
+    const wastageWhere: any = { date: { gte: start, lte: end } };
+    if (destinationId) wastageWhere.destinationId = destinationId;
+    const wastages = await this.prisma.wastage.findMany({
+      where: wastageWhere,
+      include: { item: true },
+    });
 
-      // Aggregating for spinBreakdown
-      const existing = spinItemMap.get(reward.itemId) || {
-        name: reward.item.name,
-        quantity: 0,
-      };
-      existing.quantity += Math.abs(reward.quantityChange);
-      spinItemMap.set(reward.itemId, existing);
-    }
-
-    const spinBreakdown = Array.from(spinItemMap.entries()).map(
-      ([itemId, data]) => ({
-        itemId,
-        ...data,
-      }),
-    );
+    const wastageCount = wastages.reduce((sum, w) => sum + w.quantity, 0);
 
     return {
       date: start,
@@ -160,11 +122,7 @@ export class ReportsService {
       spinRevenue: Number(spinRevenue.toFixed(2)),
       spinCount,
       totalTips: Number(totalTips.toFixed(2)),
-      grossProfit: Number(
-        (totalRevenue - totalCOGS - marketingCost).toFixed(2),
-      ),
-      totalCOGS: Number(totalCOGS.toFixed(2)),
-      marketingCost: Number(marketingCost.toFixed(2)),
+      wastageCount,
       paymentBreakdown: {
         CASH: Number(paymentBreakdown.CASH.toFixed(2)),
         TELEBIRR: Number(paymentBreakdown.TELEBIRR.toFixed(2)),
@@ -182,16 +140,17 @@ export class ReportsService {
 
   async getInventoryStatus() {
     const items = await this.prisma.items.findMany({ where: { isActive: true } });
-    const status: { id: number; name: string; currentStock: number; valuation: number }[] = [];
+    const status: { id: number; name: string; warehouseStock: number }[] = [];
 
     for (const item of items) {
-      const currentStock = await this.stockService.calculateStock(item.id);
-      const avgCost = await this.purchasesService.calculateAverageCost(item.id);
+      const stockAgg = await this.prisma.inventoryMovements.aggregate({
+        where: { itemId: item.id, destinationId: null },
+        _sum: { quantityChange: true },
+      });
       status.push({
         id: item.id,
         name: item.name,
-        currentStock,
-        valuation: currentStock * avgCost,
+        warehouseStock: stockAgg._sum.quantityChange || 0,
       });
     }
 
