@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { DestinationsService } from './destinations.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -31,8 +31,14 @@ export class DestinationsController {
   @Roles('ADMIN', 'STOCK')
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { name?: string; notes?: string; isActive?: boolean },
+    @Body() body: { name?: string; notes?: string; isActive?: boolean; type?: DestinationType },
   ) {
     return this.destinationsService.update(id, body);
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN', 'STOCK')
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.destinationsService.remove(id);
   }
 }

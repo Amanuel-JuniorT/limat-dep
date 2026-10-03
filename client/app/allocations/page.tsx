@@ -24,6 +24,8 @@ import {
   Check,
   Calendar,
   User,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import api from "@/lib/api";
 import { Item, StockDestination, Allocation } from "@/types/pos";
@@ -64,6 +66,13 @@ export default function StockAllocationsPage() {
   const [endEventReturnItems, setEndEventReturnItems] = useState<
     { itemId: number; itemName: string; currentStock: number; returnQty: string }[]
   >([]);
+
+  // Edit Destination Modal
+  const [editDest, setEditDest] = useState<StockDestination | null>(null);
+  const [editDestName, setEditDestName] = useState("");
+  const [editDestType, setEditDestType] = useState<"SHOP" | "EVENT_WINDOW">("SHOP");
+  const [editDestNotes, setEditDestNotes] = useState("");
+  const [editDestActive, setEditDestActive] = useState(true);
 
   // New Allocation Form
   const [isReturnMode, setIsReturnMode] = useState(false);
@@ -270,6 +279,46 @@ export default function StockAllocationsPage() {
       fetchInitialData();
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to update destination status");
+    }
+  };
+
+  const openEditModal = (dest: StockDestination) => {
+    setEditDest(dest);
+    setEditDestName(dest.name);
+    setEditDestType(dest.type as "SHOP" | "EVENT_WINDOW");
+    setEditDestNotes(dest.notes || "");
+    setEditDestActive(dest.isActive);
+  };
+
+  const handleEditDestination = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editDest || !editDestName.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await api.patch(`/destinations/${editDest.id}`, {
+        name: editDestName.trim(),
+        type: editDestType,
+        notes: editDestNotes.trim() || undefined,
+        isActive: editDestActive,
+      });
+      setEditDest(null);
+      setSuccess("Destination updated successfully!");
+      fetchInitialData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to update destination");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteDestination = async (dest: StockDestination) => {
+    if (!confirm(`Delete "${dest.name}"? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/destinations/${dest.id}`);
+      setSuccess(`"${dest.name}" deleted successfully.`);
+      fetchInitialData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to delete destination");
     }
   };
 
@@ -592,7 +641,7 @@ export default function StockAllocationsPage() {
 
                     {/* Controls */}
                     {canManage && (
-                      <div className="flex gap-2 pt-1">
+                      <div className="flex gap-2 pt-1 flex-wrap">
                         <button
                           onClick={() => {
                             setSelectedDestinationId(dest.id.toString());
@@ -614,6 +663,22 @@ export default function StockAllocationsPage() {
                             End Event & Return Stock
                           </button>
                         )}
+
+                        {/* Edit & Delete */}
+                        <button
+                          onClick={() => openEditModal(dest)}
+                          className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-black flex items-center justify-center gap-1.5 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteDestination(dest)}
+                          className="py-2 px-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 text-rose-600 text-xs font-black flex items-center justify-center gap-1.5 transition-colors hover:bg-rose-100 dark:hover:bg-rose-900/40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
                       </div>
                     )}
                   </div>
@@ -849,6 +914,117 @@ export default function StockAllocationsPage() {
                   ) : (
                     "Confirm Return & Close Event"
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Destination */}
+      {editDest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm bento-card p-6 bg-white dark:bg-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black tracking-tight">
+                Edit <span className="text-emerald-600">Location</span>
+              </h3>
+              <button
+                onClick={() => setEditDest(null)}
+                className="p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditDestination} className="space-y-4">
+              {/* Name */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Location Name
+                </label>
+                <input
+                  required
+                  type="text"
+                  value={editDestName}
+                  onChange={(e) => setEditDestName(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs font-bold outline-none focus:ring-4 focus:ring-emerald-600/5 focus:border-emerald-600 dark:bg-slate-800 dark:border-slate-800"
+                />
+              </div>
+
+              {/* Type */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Location Type
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["SHOP", "EVENT_WINDOW"] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setEditDestType(t)}
+                      className={cn(
+                        "flex items-center justify-center gap-2 py-3 rounded-2xl border text-xs font-black transition-all",
+                        editDestType === t
+                          ? "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-200 dark:shadow-none"
+                          : "bg-slate-50 border-slate-100 text-slate-500 dark:bg-slate-800 dark:border-slate-700",
+                      )}
+                    >
+                      {t === "SHOP" ? <Store className="h-3.5 w-3.5" /> : <Building className="h-3.5 w-3.5" />}
+                      {t === "SHOP" ? "Shop" : "Event"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                  Notes
+                </label>
+                <input
+                  type="text"
+                  value={editDestNotes}
+                  onChange={(e) => setEditDestNotes(e.target.value)}
+                  placeholder="Optional description..."
+                  className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs font-bold outline-none focus:ring-4 focus:ring-emerald-600/5 focus:border-emerald-600 dark:bg-slate-800 dark:border-slate-800"
+                />
+              </div>
+
+              {/* Status toggle */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                <span className="text-xs font-black text-slate-600 dark:text-slate-300">Status: Active</span>
+                <button
+                  type="button"
+                  onClick={() => setEditDestActive((v) => !v)}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
+                    editDestActive ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-700",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow",
+                      editDestActive ? "translate-x-6" : "translate-x-1",
+                    )}
+                  />
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditDest(null)}
+                  className="flex-1 rounded-2xl border border-slate-100 py-3 text-xs font-black text-slate-400 hover:bg-slate-50 dark:border-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-1 rounded-2xl bg-emerald-600 py-3 text-xs font-black text-white hover:bg-emerald-700 shadow-lg shadow-emerald-200 dark:shadow-none flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
                 </button>
               </div>
             </form>

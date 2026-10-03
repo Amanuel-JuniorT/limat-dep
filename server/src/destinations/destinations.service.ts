@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DestinationType } from '@prisma/client';
 
@@ -25,12 +25,31 @@ export class DestinationsService {
     });
   }
 
-  async update(id: number, data: { name?: string; notes?: string; isActive?: boolean }) {
+  async update(id: number, data: { name?: string; notes?: string; isActive?: boolean; type?: DestinationType }) {
     const dest = await this.prisma.stockDestination.findUnique({ where: { id } });
     if (!dest) throw new NotFoundException('Destination not found');
     return this.prisma.stockDestination.update({
       where: { id },
       data,
     });
+  }
+
+  async remove(id: number) {
+    const dest = await this.prisma.stockDestination.findUnique({ where: { id } });
+    if (!dest) throw new NotFoundException('Destination not found');
+
+    // Check if there is any active stock allocated at this destination
+    const stockAgg = await this.prisma.inventoryMovements.aggregate({
+      where: { destinationId: id },
+      _sum: { quantityChange: true },
+    });
+    const activeStock = stockAgg._sum.quantityChange || 0;
+    if (activeStock > 0) {
+      throw new BadRequestException(
+        `Cannot delete "${dest.name}" — it still has ${activeStock} unit(s) of allocated stock. Return stock to warehouse first.`,
+      );
+    }
+
+    return this.prisma.stockDestination.delete({ where: { id } });
   }
 }
