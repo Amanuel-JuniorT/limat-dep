@@ -12,20 +12,27 @@ export class AllocationService {
       destinationId: number;
       items: { itemId: number; quantity: number }[];
       notes?: string;
+      spinPrice?: number;
     },
   ) {
-    const { destinationId, items, notes } = data;
+    const { destinationId, items, notes, spinPrice } = data;
 
     const dest = await this.prisma.stockDestination.findUnique({ where: { id: destinationId } });
     if (!dest) throw new NotFoundException('Destination not found');
 
     return this.prisma.$transaction(async (tx) => {
-      // Auto-reopen a closed EVENT_WINDOW when new stock is allocated to it
-      if (dest.type === 'EVENT_WINDOW' && !dest.isActive) {
-        await tx.stockDestination.update({
-          where: { id: destinationId },
-          data: { isActive: true },
-        });
+      // Auto-reopen a closed EVENT_WINDOW when new stock is allocated to it, and update spinPrice if supplied
+      if (dest.type === 'EVENT_WINDOW') {
+        const updateData: { isActive?: boolean; spinPrice?: number } = {};
+        if (!dest.isActive) updateData.isActive = true;
+        if (spinPrice !== undefined && !isNaN(Number(spinPrice))) updateData.spinPrice = Number(spinPrice);
+
+        if (Object.keys(updateData).length > 0) {
+          await tx.stockDestination.update({
+            where: { id: destinationId },
+            data: updateData,
+          });
+        }
       }
 
       const allocation = await tx.allocation.create({

@@ -60,6 +60,7 @@ export default function StockAllocationsPage() {
   const [destName, setDestName] = useState("");
   const [destType, setDestType] = useState<"SHOP" | "EVENT_WINDOW">("SHOP");
   const [destNotes, setDestNotes] = useState("");
+  const [destSpinPrice, setDestSpinPrice] = useState<string>("30");
 
   // End Event Window & Return Stock Modal
   const [endEventDest, setEndEventDest] = useState<StockDestination | null>(null);
@@ -73,10 +74,12 @@ export default function StockAllocationsPage() {
   const [editDestType, setEditDestType] = useState<"SHOP" | "EVENT_WINDOW">("SHOP");
   const [editDestNotes, setEditDestNotes] = useState("");
   const [editDestActive, setEditDestActive] = useState(true);
+  const [editDestSpinPrice, setEditDestSpinPrice] = useState<string>("30");
 
   // New Allocation Form
   const [isReturnMode, setIsReturnMode] = useState(false);
   const [selectedDestinationId, setSelectedDestinationId] = useState<string>("");
+  const [allocSpinPrice, setAllocSpinPrice] = useState<string>("30");
   const [notes, setNotes] = useState("");
 
   // Items to allocate / return
@@ -124,6 +127,14 @@ export default function StockAllocationsPage() {
     fetchInitialData();
   }, [fetchInitialData]);
 
+  const selectedDest = destinations.find((d) => d.id.toString() === selectedDestinationId);
+
+  useEffect(() => {
+    if (selectedDest && selectedDest.type === "EVENT_WINDOW") {
+      setAllocSpinPrice((selectedDest.spinPrice ?? 30).toString());
+    }
+  }, [selectedDestinationId, selectedDest?.spinPrice]);
+
   const handleCreateDestination = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!destName.trim()) return;
@@ -134,9 +145,11 @@ export default function StockAllocationsPage() {
         name: destName.trim(),
         type: destType,
         notes: destNotes.trim() || undefined,
+        spinPrice: destType === "EVENT_WINDOW" ? (parseFloat(destSpinPrice) || 30) : undefined,
       });
       setDestName("");
       setDestNotes("");
+      setDestSpinPrice("30");
       setIsDestModalOpen(false);
       setSuccess("New destination added successfully!");
       fetchInitialData();
@@ -197,6 +210,7 @@ export default function StockAllocationsPage() {
           quantity: i.quantity,
         })),
         notes: notes.trim() || undefined,
+        spinPrice: !isReturnMode && selectedDest?.type === "EVENT_WINDOW" ? (parseFloat(allocSpinPrice) || 30) : undefined,
       });
 
       setSuccess(
@@ -288,6 +302,7 @@ export default function StockAllocationsPage() {
     setEditDestType(dest.type as "SHOP" | "EVENT_WINDOW");
     setEditDestNotes(dest.notes || "");
     setEditDestActive(dest.isActive);
+    setEditDestSpinPrice((dest.spinPrice ?? 30).toString());
   };
 
   const handleEditDestination = async (e: React.FormEvent) => {
@@ -300,6 +315,7 @@ export default function StockAllocationsPage() {
         type: editDestType,
         notes: editDestNotes.trim() || undefined,
         isActive: editDestActive,
+        spinPrice: editDestType === "EVENT_WINDOW" ? (parseFloat(editDestSpinPrice) || 30) : undefined,
       });
       setEditDest(null);
       setSuccess("Destination updated successfully!");
@@ -442,19 +458,37 @@ export default function StockAllocationsPage() {
                     </option>
                   ))}
                 </select>
-                {/* Warn if selected destination is a closed event — it will auto-reopen */}
-                {(() => {
-                  const sel = destinations.find((d) => d.id.toString() === selectedDestinationId);
-                  if (!isReturnMode && sel && sel.type === "EVENT_WINDOW" && !sel.isActive) {
-                    return (
-                      <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 ml-1 mt-1">
-                        ⚠ This event window is closed. Allocating will automatically reopen it.
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
               </div>
+
+              {/* Spin Price configuration for Event Window destinations */}
+              {!isReturnMode && selectedDest && selectedDest.type === "EVENT_WINDOW" && (
+                <div className="space-y-1.5 rounded-2xl bg-amber-500/5 p-4 border border-amber-500/20">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                      🎡 Event Spin Price (ETB per Spin)
+                    </label>
+                    {!selectedDest.isActive && (
+                      <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md">
+                        Reopening Event
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={allocSpinPrice}
+                    onChange={(e) => setAllocSpinPrice(e.target.value)}
+                    placeholder="Spin price (e.g. 30)"
+                    className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm font-bold text-slate-800 outline-none focus:border-amber-500 dark:bg-slate-800 dark:border-slate-700 dark:text-white"
+                  />
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {!selectedDest.isActive
+                      ? "Allocating items will automatically reopen this event window with this spin price."
+                      : "Confirm or update the active spin price for this event."}
+                  </p>
+                </div>
+              )}
 
               {/* Add Items */}
               <div className="space-y-3 pt-2">
@@ -606,6 +640,11 @@ export default function StockAllocationsPage() {
                           </div>
                           {dest.notes && (
                             <p className="text-[10px] text-slate-400 font-medium mt-0.5">{dest.notes}</p>
+                          )}
+                          {dest.type === "EVENT_WINDOW" && (
+                            <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 mt-0.5 flex items-center gap-1">
+                              🎡 {(dest.spinPrice ?? 30).toLocaleString()} ETB / spin
+                            </p>
                           )}
                         </div>
                       </div>
@@ -821,6 +860,27 @@ export default function StockAllocationsPage() {
                 />
               </div>
 
+              {/* Spin Price — only for event windows */}
+              {destType === "EVENT_WINDOW" && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Price Per Spin (ETB)
+                  </label>
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 dark:bg-slate-800 dark:border-slate-800">
+                    <span className="text-xs font-black text-slate-400">ETB</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={destSpinPrice}
+                      onChange={(e) => setDestSpinPrice(e.target.value)}
+                      className="flex-1 bg-transparent py-4 text-sm font-black outline-none text-emerald-700 dark:text-emerald-400"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 ml-1">Default is 30 ETB per spin</p>
+                </div>
+              )}
+
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -990,6 +1050,27 @@ export default function StockAllocationsPage() {
                   className="w-full rounded-2xl border border-slate-100 bg-slate-50 p-4 text-xs font-bold outline-none focus:ring-4 focus:ring-emerald-600/5 focus:border-emerald-600 dark:bg-slate-800 dark:border-slate-800"
                 />
               </div>
+
+              {/* Spin Price — only for event windows */}
+              {editDestType === "EVENT_WINDOW" && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Price Per Spin (ETB)
+                  </label>
+                  <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 dark:bg-slate-800 dark:border-slate-800">
+                    <span className="text-xs font-black text-slate-400">ETB</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={editDestSpinPrice}
+                      onChange={(e) => setEditDestSpinPrice(e.target.value)}
+                      className="flex-1 bg-transparent py-4 text-sm font-black outline-none text-emerald-700 dark:text-emerald-400"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 ml-1">This price applies to all future spin reports for this event</p>
+                </div>
+              )}
 
               {/* Status toggle */}
               <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">

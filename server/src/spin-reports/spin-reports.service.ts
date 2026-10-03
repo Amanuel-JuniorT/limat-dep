@@ -56,12 +56,14 @@ export class SpinReportsService {
     let subtotal = 0;
     let totalTips = 0;
 
+    const spinPricePerSpin = Number(dest.spinPrice ?? 30);
+
     const processedItems = items.map((i) => {
       const type = i.type || EventRecordType.SPIN;
       const spinCount = type === EventRecordType.SPIN ? (i.spinCount || 1) : 0;
       const quantity = type === EventRecordType.SALE ? (i.quantity || 1) : (i.quantity || 0); // for spin, quantity is reward item count if any
-      const unitPrice = type === EventRecordType.SALE ? (i.unitPrice || 0) : 30; // 30 ETB per spin
-      const itemSubtotal = type === EventRecordType.SPIN ? spinCount * 30 : quantity * unitPrice;
+      const unitPrice = type === EventRecordType.SALE ? (i.unitPrice || 0) : spinPricePerSpin;
+      const itemSubtotal = type === EventRecordType.SPIN ? spinCount * spinPricePerSpin : quantity * unitPrice;
       const tipAmount = i.tipAmount || 0;
 
       totalSpins += spinCount;
@@ -102,7 +104,7 @@ export class SpinReportsService {
           userId,
           reportDate: dateObj,
           spinCount: totalSpins,
-          revenuePerSpin: 30,
+          revenuePerSpin: spinPricePerSpin,
           subtotal,
           tipAmount: totalTips,
           totalAmount,
@@ -230,12 +232,14 @@ export class SpinReportsService {
     let subtotal = 0;
     let totalTips = 0;
 
+    const spinPricePerSpin = Number(dest.spinPrice ?? 30);
+
     const processedItems = itemsInput.map((i) => {
       const type = i.type || EventRecordType.SPIN;
       const spinCount = type === EventRecordType.SPIN ? (i.spinCount || 1) : 0;
       const quantity = type === EventRecordType.SALE ? (i.quantity || 1) : (i.quantity || 0);
-      const unitPrice = type === EventRecordType.SALE ? (i.unitPrice || 0) : 30;
-      const itemSubtotal = type === EventRecordType.SPIN ? spinCount * 30 : quantity * unitPrice;
+      const unitPrice = type === EventRecordType.SALE ? (i.unitPrice || 0) : spinPricePerSpin;
+      const itemSubtotal = type === EventRecordType.SPIN ? spinCount * spinPricePerSpin : quantity * unitPrice;
       const tipAmount = i.tipAmount || 0;
 
       totalSpins += spinCount;
@@ -276,7 +280,7 @@ export class SpinReportsService {
           destinationId,
           reportDate: dateObj,
           spinCount: totalSpins,
-          revenuePerSpin: 30,
+          revenuePerSpin: spinPricePerSpin,
           subtotal,
           tipAmount: totalTips,
           totalAmount,

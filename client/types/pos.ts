@@ -37,6 +37,7 @@ export interface StockDestination {
   type: DestinationType;
   isActive: boolean;
   notes?: string;
+  spinPrice?: number;
 }
 
 export interface AllocationItem {

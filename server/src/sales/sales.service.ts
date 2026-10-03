@@ -91,8 +91,16 @@ export class SalesService {
     rewardItemId?: number,
     tipAmount?: number,
     paymentMethod: PaymentMethod = PaymentMethod.CASH,
+    destinationId?: number,
   ): Promise<Transactions> {
-    const SPIN_PRICE = 30;
+    // Resolve the spin price from the destination if provided, otherwise default to 30
+    let SPIN_PRICE = 30;
+    if (destinationId) {
+      const dest = await this.prisma.stockDestination.findUnique({ where: { id: destinationId } });
+      if (dest?.spinPrice) {
+        SPIN_PRICE = Number(dest.spinPrice);
+      }
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const totalAmount = SPIN_PRICE + (tipAmount || 0);

@@ -12,7 +12,7 @@ export class DestinationsController {
 
   @Post()
   @Roles('ADMIN', 'STOCK')
-  async create(@Body() body: { name: string; type: DestinationType; notes?: string }) {
+  async create(@Body() body: { name: string; type: DestinationType; notes?: string; spinPrice?: number }) {
     return this.destinationsService.create(body);
   }
 
@@ -31,7 +31,7 @@ export class DestinationsController {
   @Roles('ADMIN', 'STOCK')
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { name?: string; notes?: string; isActive?: boolean; type?: DestinationType },
+    @Body() body: { name?: string; notes?: string; isActive?: boolean; type?: DestinationType; spinPrice?: number },
   ) {
     return this.destinationsService.update(id, body);
   }

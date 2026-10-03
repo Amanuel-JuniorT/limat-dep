@@ -135,13 +135,14 @@ enum DestinationType {
 }
 
 model StockDestination {
-  id        Int             @id @default(autoincrement())
-  name      String          // e.g. "Shop", "Event Table A", "Window 2"
-  type      DestinationType
-  isActive  Boolean         @default(true)
-  notes     String?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+  id         Int             @id @default(autoincrement())
+  name       String          // e.g. "Shop", "Event Table A", "Window 2"
+  type       DestinationType
+  isActive   Boolean         @default(true)
+  notes      String?
+  spinPrice  Decimal         @default(30) @db.Decimal(12, 2) // price per spin (EVENT_WINDOW only)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
   allocations  Allocation[]
   salesReports SalesReport[]

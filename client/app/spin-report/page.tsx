@@ -132,6 +132,10 @@ export default function SpinReportPage() {
 
   const noActiveEventOpened = destinations.length === 0 || !selectedDestinationId;
 
+  // Derive the spin price from the selected destination (defaults to 30)
+  const selectedDest = destinations.find((d) => d.id.toString() === selectedDestinationId);
+  const currentSpinPrice = Number(selectedDest?.spinPrice ?? 30);
+
   const isSelectedDateClosed = closedDates.some(
     (c) =>
       c.destinationId.toString() === selectedDestinationId &&
@@ -168,7 +172,7 @@ export default function SpinReportPage() {
           spinIndex: totalSpins > 1 ? slot.spinIndex : undefined,
           spinCount: 1, // each spin is recorded distinct
           quantity: rewardQty,
-          unitPrice: 30, // 30 ETB per spin
+          unitPrice: currentSpinPrice, // dynamic from destination config
           paymentMethod: itemPaymentMethod,
           tipAmount: Math.max(0, tipPerSpin),
           notes: itemNotes.trim() || undefined,

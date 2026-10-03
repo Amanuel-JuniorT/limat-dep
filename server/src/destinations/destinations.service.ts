@@ -6,9 +6,12 @@ import { DestinationType } from '@prisma/client';
 export class DestinationsService {
   constructor(private prisma: PrismaService) {}
 
-  async create(data: { name: string; type: DestinationType; notes?: string }) {
+  async create(data: { name: string; type: DestinationType; notes?: string; spinPrice?: number }) {
     return this.prisma.stockDestination.create({
-      data,
+      data: {
+        ...data,
+        spinPrice: data.spinPrice !== undefined ? data.spinPrice : 30,
+      },
     });
   }
 
@@ -25,7 +28,7 @@ export class DestinationsService {
     });
   }
 
-  async update(id: number, data: { name?: string; notes?: string; isActive?: boolean; type?: DestinationType }) {
+  async update(id: number, data: { name?: string; notes?: string; isActive?: boolean; type?: DestinationType; spinPrice?: number }) {
     const dest = await this.prisma.stockDestination.findUnique({ where: { id } });
     if (!dest) throw new NotFoundException('Destination not found');
     return this.prisma.stockDestination.update({

@@ -19,9 +19,9 @@ export class SalesController {
   @Post('spin')
   createSpin(
     @Req() req,
-    @Body() data: { spinResult: string; rewardItemId?: number; tipAmount?: number; paymentMethod?: PaymentMethod }
+    @Body() data: { spinResult: string; rewardItemId?: number; tipAmount?: number; paymentMethod?: PaymentMethod; destinationId?: number }
   ) {
-    return this.salesService.createSpin(req.user.id, data.spinResult, data.rewardItemId, data.tipAmount, data.paymentMethod);
+    return this.salesService.createSpin(req.user.id, data.spinResult, data.rewardItemId, data.tipAmount, data.paymentMethod, data.destinationId);
   }
 
   @Get()

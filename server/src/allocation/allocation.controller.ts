@@ -13,7 +13,7 @@ export class AllocationController {
   @Roles('ADMIN', 'STOCK')
   async createAllocation(
     @Request() req,
-    @Body() body: { destinationId: number; items: { itemId: number; quantity: number }[]; notes?: string },
+    @Body() body: { destinationId: number; items: { itemId: number; quantity: number }[]; notes?: string; spinPrice?: number },
   ) {
     return this.allocationService.createAllocation(req.user.id, body);
   }
